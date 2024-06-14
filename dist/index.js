@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.polyfillWebSQL = void 0;
-function polyfillWebSQL() {
+exports.ActiveWebSQLPolyfill = void 0;
+function ActiveWebSQLPolyfill() {
     if (!window.openDatabase) {
         window.openDatabase = function (name, version, displayName, estimatedSize) {
             return new WebSQLDatabase(name, version, displayName, estimatedSize);
@@ -182,4 +182,4 @@ function polyfillWebSQL() {
         }
     }
 }
-exports.polyfillWebSQL = polyfillWebSQL;
+exports.ActiveWebSQLPolyfill = ActiveWebSQLPolyfill;
