@@ -17,6 +17,7 @@ declare global {
     interface Window {
         openDatabase?: (name: string, version: string, displayName: string, estimatedSize: number) => Database;
     }
+    var openDatabase: (name: string, version: string, displayName: string, estimatedSize: number) => Database;
 }
 export declare function ActiveWebSQLPolyfill(): void;
 export {};

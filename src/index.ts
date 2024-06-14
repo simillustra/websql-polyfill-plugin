@@ -36,6 +36,12 @@ declare global {
             estimatedSize: number
         ) => Database;
     }
+    var openDatabase: (
+        name: string,
+        version: string,
+        displayName: string,
+        estimatedSize: number
+    ) => Database;
 }
 
 export function ActiveWebSQLPolyfill() {
