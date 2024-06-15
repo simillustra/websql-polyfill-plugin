@@ -8,16 +8,16 @@ interface SQLResultSet {
     rowsAffected?: number;
 }
 interface SQLTransaction {
-    executeSql(sql: string, args?: any[], callback?: (transaction: SQLTransaction, resultSet: SQLResultSet) => void, errorCallback?: (transaction: SQLTransaction, error: DOMException) => void): void;
+    executeSql(sql: string, params?: any[], successCallback?: (transaction: SQLTransaction, resultSet: SQLResultSet) => void, errorCallback?: (transaction: SQLTransaction, error: DOMException) => void): void;
 }
 interface Database {
     transaction(callback: (transaction: SQLTransaction) => void, errorCallback?: (error: DOMException) => void, successCallback?: () => void): void;
 }
+declare var openDatabase: (name: string, version: string, displayName: string, estimatedSize: number) => Database;
 declare global {
     interface Window {
-        openDatabase?: (name: string, version: string, displayName: string, estimatedSize: number) => Database;
+        openDatabase?: typeof openDatabase;
     }
-    var openDatabase: (name: string, version: string, displayName: string, estimatedSize: number) => Database;
 }
 export declare function ActiveWebSQLPolyfill(): void;
 export {};

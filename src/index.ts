@@ -13,8 +13,8 @@ interface SQLResultSet {
 interface SQLTransaction {
     executeSql(
         sql: string,
-        args?: any[],
-        callback?: (transaction: SQLTransaction, resultSet: SQLResultSet) => void,
+        params?: any[],
+        successCallback?: (transaction: SQLTransaction, resultSet: SQLResultSet) => void,
         errorCallback?: (transaction: SQLTransaction, error: DOMException) => void
     ): void;
 }
@@ -27,21 +27,17 @@ interface Database {
     ): void;
 }
 
+declare var openDatabase: (
+    name: string,
+    version: string,
+    displayName: string,
+    estimatedSize: number
+) => Database;
+
 declare global {
     interface Window {
-        openDatabase?: (
-            name: string,
-            version: string,
-            displayName: string,
-            estimatedSize: number
-        ) => Database;
+        openDatabase?: typeof openDatabase;
     }
-    var openDatabase: (
-        name: string,
-        version: string,
-        displayName: string,
-        estimatedSize: number
-    ) => Database;
 }
 
 export function ActiveWebSQLPolyfill() {
@@ -69,9 +65,6 @@ export function ActiveWebSQLPolyfill() {
                     const request = indexedDB.open(name, parseInt(version));
                     request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
                         this.db = (event.target as IDBOpenDBRequest).result;
-                        if (!this.db.objectStoreNames.contains('store')) {
-                            this.db.createObjectStore('store', { keyPath: 'id', autoIncrement: true });
-                        }
                     };
                     request.onsuccess = (event: Event) => {
                         this.db = (event.target as IDBOpenDBRequest).result;
@@ -86,7 +79,7 @@ export function ActiveWebSQLPolyfill() {
 
             transaction(callback: (transaction: SQLTransaction) => void, errorCallback?: (error: DOMException) => void, successCallback?: () => void): void {
                 this.dbReady.then((db) => {
-                    const transaction = db.transaction(['store'], 'readwrite');
+                    const transaction = db.transaction(db.objectStoreNames, 'readwrite');
                     const sqlTransaction = new WebSQLTransaction(transaction);
                     callback(sqlTransaction);
                     transaction.oncomplete = () => {
@@ -114,7 +107,12 @@ export function ActiveWebSQLPolyfill() {
                 successCallback?: (transaction: SQLTransaction, resultSet: SQLResultSet) => void,
                 errorCallback?: (transaction: SQLTransaction, error: DOMException) => void
             ): void {
-                const store = this.transaction.objectStore('store');
+                const storeName = extractTableName(sql);
+                if (!storeName) {
+                    if (errorCallback) errorCallback(this, new DOMException('Invalid SQL command'));
+                    return;
+                }
+                const store = this.transaction.objectStore(storeName);
 
                 if (sql.trim().toUpperCase().startsWith('INSERT')) {
                     const data = extractValuesFromInsert(sql, params);
@@ -198,6 +196,11 @@ export function ActiveWebSQLPolyfill() {
             }
         }
 
+        function extractTableName(sql: string): string | null {
+            const matches = sql.match(/FROM\s+(\w+)/i) || sql.match(/INTO\s+(\w+)/i);
+            return matches ? matches[1] : null;
+        }
+
         function extractValuesFromInsert(sql: string, params: any[]): Record<string, any> {
             const values: Record<string, any> = {};
             const matches = sql.match(/INSERT INTO \w+ \(([^)]+)\) VALUES \(([^)]+)\)/i);
@@ -210,23 +213,25 @@ export function ActiveWebSQLPolyfill() {
             return values;
         }
 
-        function extractValuesFromUpdate(sql: string, params: any[]): { id: number | null; updates: Record<string, any> } {
-            const matches = sql.match(/UPDATE \w+ SET (.+) WHERE id = ?/i);
+        function extractValuesFromUpdate(sql: string, params: any[]): { id: number | null, updates: Record<string, any> } {
             const updates: Record<string, any> = {};
+            let id: number | null = null;
+            const matches = sql.match(/UPDATE \w+ SET ([^ ]+) WHERE id = ?/i);
             if (matches) {
-                const keyValuePairs = matches[1].split(',').map(pair => pair.trim().split('='));
-                keyValuePairs.forEach((pair, index) => {
-                    updates[pair[0].trim()] = params[index];
+                const assignments = matches[1].split(',').map(assign => assign.trim());
+                assignments.forEach((assignment, index) => {
+                    const [key, value] = assignment.split('=').map(part => part.trim());
+                    updates[key] = params[index];
                 });
+                id = params[assignments.length];
             }
-            const id = params[params.length - 1] ?? null;
             return { id, updates };
         }
 
         function extractIdFromDelete(sql: string, params: any[]): number | null {
             const matches = sql.match(/DELETE FROM \w+ WHERE id = ?/i);
             if (matches) {
-                return params[0] ?? null;
+                return params[0];
             }
             return null;
         }

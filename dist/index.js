@@ -17,9 +17,6 @@ function ActiveWebSQLPolyfill() {
                     const request = indexedDB.open(name, parseInt(version));
                     request.onupgradeneeded = (event) => {
                         this.db = event.target.result;
-                        if (!this.db.objectStoreNames.contains('store')) {
-                            this.db.createObjectStore('store', { keyPath: 'id', autoIncrement: true });
-                        }
                     };
                     request.onsuccess = (event) => {
                         this.db = event.target.result;
@@ -33,7 +30,7 @@ function ActiveWebSQLPolyfill() {
             }
             transaction(callback, errorCallback, successCallback) {
                 this.dbReady.then((db) => {
-                    const transaction = db.transaction(['store'], 'readwrite');
+                    const transaction = db.transaction(db.objectStoreNames, 'readwrite');
                     const sqlTransaction = new WebSQLTransaction(transaction);
                     callback(sqlTransaction);
                     transaction.oncomplete = () => {
@@ -55,7 +52,13 @@ function ActiveWebSQLPolyfill() {
                 this.transaction = transaction;
             }
             executeSql(sql, params = [], successCallback, errorCallback) {
-                const store = this.transaction.objectStore('store');
+                const storeName = extractTableName(sql);
+                if (!storeName) {
+                    if (errorCallback)
+                        errorCallback(this, new DOMException('Invalid SQL command'));
+                    return;
+                }
+                const store = this.transaction.objectStore(storeName);
                 if (sql.trim().toUpperCase().startsWith('INSERT')) {
                     const data = extractValuesFromInsert(sql, params);
                     const request = store.add(data);
@@ -148,6 +151,10 @@ function ActiveWebSQLPolyfill() {
                 }
             }
         }
+        function extractTableName(sql) {
+            const matches = sql.match(/FROM\s+(\w+)/i) || sql.match(/INTO\s+(\w+)/i);
+            return matches ? matches[1] : null;
+        }
         function extractValuesFromInsert(sql, params) {
             const values = {};
             const matches = sql.match(/INSERT INTO \w+ \(([^)]+)\) VALUES \(([^)]+)\)/i);
@@ -160,23 +167,23 @@ function ActiveWebSQLPolyfill() {
             return values;
         }
         function extractValuesFromUpdate(sql, params) {
-            var _a;
-            const matches = sql.match(/UPDATE \w+ SET (.+) WHERE id = ?/i);
             const updates = {};
+            let id = null;
+            const matches = sql.match(/UPDATE \w+ SET ([^ ]+) WHERE id = ?/i);
             if (matches) {
-                const keyValuePairs = matches[1].split(',').map(pair => pair.trim().split('='));
-                keyValuePairs.forEach((pair, index) => {
-                    updates[pair[0].trim()] = params[index];
+                const assignments = matches[1].split(',').map(assign => assign.trim());
+                assignments.forEach((assignment, index) => {
+                    const [key, value] = assignment.split('=').map(part => part.trim());
+                    updates[key] = params[index];
                 });
+                id = params[assignments.length];
             }
-            const id = (_a = params[params.length - 1]) !== null && _a !== void 0 ? _a : null;
             return { id, updates };
         }
         function extractIdFromDelete(sql, params) {
-            var _a;
             const matches = sql.match(/DELETE FROM \w+ WHERE id = ?/i);
             if (matches) {
-                return (_a = params[0]) !== null && _a !== void 0 ? _a : null;
+                return params[0];
             }
             return null;
         }
